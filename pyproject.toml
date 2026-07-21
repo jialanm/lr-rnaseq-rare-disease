@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rare-disease-lr-rnaseq"
+version = "0.1.0"
+description = "Long-read RNA-seq transcriptome characterization for rare disease"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pysam",
+    "scipy",
+    "seaborn",
+]
+
+[project.optional-dependencies]
+batch = [
+    "hailtop",
+    "hail",
+]
+dev = [
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
