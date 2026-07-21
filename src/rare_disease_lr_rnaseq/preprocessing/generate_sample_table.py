@@ -16,7 +16,7 @@ sample_id
 total_readcount
 RIN
 total_transcripts_count
-unqiue_transcripts_count
+unique_transcripts_count
 
 * can include more columns for structural categories
 * ['internal_fragment' 'at_least_one_novel_splicesite' 'reference_match'
