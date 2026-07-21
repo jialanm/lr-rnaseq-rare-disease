@@ -37,25 +37,29 @@ def annotate_expr(sample_id: str, sqanti3_df: pd.DataFrame) -> pd.DataFrame:
     return annotated_df
 
 
-def map_gene_id_to_gene_name_and_type(gene_ids: set[str]) -> dict[str, list[str]]:
+def load_gene_id_map() -> dict[str, list[str]]:
     """
-    Map gene IDs to gene names and gene types using a GENCODE GTF file.
+    Load the gene-ID-to-name/type mapping, parsing the GTF at most once.
 
-    Loads a cached JSON mapping if available; otherwise, builds the mapping
-    from the GTF file.
+    Returns a cached JSON mapping if available; otherwise, parses the full
+    GENCODE GTF, writes the cache, and returns the result.
 
-    :param gene_ids: Set of gene IDs (without version suffix) to map.
     :return: Dictionary mapping gene ID to a two-element list of [gene_name, gene_type].
     """
-    gene_id_to_gene_name_map_json_filepath = f"{DATA_DIR}/gene_id_to_gene_name_map.json"
-    if os.path.exists(gene_id_to_gene_name_map_json_filepath):
-        with open(gene_id_to_gene_name_map_json_filepath, 'r') as f:
-            gene_id_to_gene_name_map = json.load(f)
-        return gene_id_to_gene_name_map
+    cache_path = f"{DATA_DIR}/gene_id_to_gene_name_map.json"
+    if os.path.exists(cache_path):
+        with open(cache_path, 'r') as f:
+            return json.load(f)
 
     gtf_file_path = f"{DATA_DIR}/gencode.v47.annotation.gtf.gz"
-    gene_id_to_gene_name_map = map_gene_ids_to_gencode_gene_name_gtf(gene_ids, gtf_file_path)
-    return gene_id_to_gene_name_map
+    logger.info("Parsing GTF to build gene-ID map (one-time)...")
+    gene_id_map = map_gene_ids_to_gencode_gene_name_gtf([], gtf_file_path)
+
+    with open(cache_path, 'w') as f:
+        json.dump(gene_id_map, f)
+    logger.info("Wrote gene-ID map cache to %s", cache_path)
+
+    return gene_id_map
 
 
 def main(rules_filter: bool = True, min_uniq_reads: int = 2) -> None:
@@ -71,12 +75,7 @@ def main(rules_filter: bool = True, min_uniq_reads: int = 2) -> None:
     :param min_uniq_reads: Minimum number of unique reads required for a transcript to be retained during expression annotation.
     """
     sample_ids = get_long_read_sample_ids()
-
-    gene_id_to_gene_name_map_json_filepath = f"{DATA_DIR}/gene_id_to_gene_name_map.json"
-    save_gene_id_to_gene_name_map = False
-    if not os.path.exists(gene_id_to_gene_name_map_json_filepath):
-        save_gene_id_to_gene_name_map = True
-        all_gene_id_to_gene_name_map = {}
+    gene_id_to_gene_name_map = load_gene_id_map()
 
     for cur_sample in sample_ids:
         logger.info(cur_sample)
@@ -88,11 +87,6 @@ def main(rules_filter: bool = True, min_uniq_reads: int = 2) -> None:
             sqanti3_df = read_sqanti3_filtered(cur_sample, rules_filter=False)
 
         sqanti3_df = annotate_expr(cur_sample, sqanti3_df)
-        cur_gene_ids = set(
-            sqanti3_df["associated_gene"].map(lambda x: x.split(".")[0]).tolist())
-        gene_id_to_gene_name_map = map_gene_id_to_gene_name_and_type(cur_gene_ids)
-        if save_gene_id_to_gene_name_map:
-            all_gene_id_to_gene_name_map.update(gene_id_to_gene_name_map)
 
         sqanti3_df["gene_name"] = sqanti3_df["associated_gene"].map(
             lambda x: gene_id_to_gene_name_map.get(x.split(".")[0], ["unknown", "unknown"])[0])
@@ -121,10 +115,6 @@ def main(rules_filter: bool = True, min_uniq_reads: int = 2) -> None:
             sqanti3_df.to_csv(f"{DATA_DIR}/annotated_sqanti3"
                               f"/{cur_sample}_ml_annotated_transcripts.csv",
                               index=False)
-
-    if save_gene_id_to_gene_name_map:
-        with open(gene_id_to_gene_name_map_json_filepath, 'w') as f:
-            json.dump(all_gene_id_to_gene_name_map, f)
 
 
 if __name__ == "__main__":
