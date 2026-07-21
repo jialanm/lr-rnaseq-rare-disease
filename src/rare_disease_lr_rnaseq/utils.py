@@ -227,6 +227,20 @@ def _compute_features_cached(
     return features_df
 
 
+def _cache_path(prefix: str, rule_filter: bool, tss_tolerance: int, pas_tolerance: int) -> str:
+    """
+    Build a parameter-aware cache filename.
+
+    :param prefix: Base name for the cache file (e.g. 'unique_transcripts_intron_terminal').
+    :param rule_filter: Whether rules-filtered SQANTI3 data was used.
+    :param tss_tolerance: TSS tolerance in base pairs.
+    :param pas_tolerance: PAS tolerance in base pairs.
+    :return: Full path to the cache JSON file.
+    """
+    filt = "rules" if rule_filter else "ml"
+    return f"{DATA_DIR}/{prefix}_{filt}_tss{tss_tolerance}_pas{pas_tolerance}.json"
+
+
 def _find_unique_tx(
     sample_ids: list[str],
     group_col: str,
@@ -410,7 +424,7 @@ def get_unique_tx(sample_ids: list[str], rule_filter: bool = True, tss_tolerance
     return _find_unique_tx(
         sample_ids,
         group_col='trio_id',
-        output_filepath=f"{DATA_DIR}/unique_transcripts_intron_terminal.json",
+        output_filepath=_cache_path("unique_transcripts_intron_terminal", rule_filter, tss_tolerance, pas_tolerance),
         rule_filter=rule_filter,
         tss_tolerance=tss_tolerance,
         pas_tolerance=pas_tolerance,
@@ -438,7 +452,7 @@ def get_individual_unique_tx(sample_ids: list[str], rule_filter: bool = True,
     return _find_unique_tx(
         sample_ids,
         group_col='sample_id',
-        output_filepath=f"{DATA_DIR}/individual_unique_transcripts.json",
+        output_filepath=_cache_path("individual_unique_transcripts", rule_filter, tss_tolerance, pas_tolerance),
         rule_filter=rule_filter,
         tss_tolerance=tss_tolerance,
         pas_tolerance=pas_tolerance,
