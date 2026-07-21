@@ -983,7 +983,7 @@ def plot_shift_vs_novel(
 
     for _, row in df.iterrows():
         yz = (row["n_psi_outliers"] - outlier_mean) / outlier_std if outlier_std > 0 else 0
-        if abs(row["gene_enrichment_z"]) > 2 or abs(yz) > 2 or "RGP_1641_3" in row["sample_id"]:
+        if abs(row["gene_enrichment_z"]) > 2 or abs(yz) > 2 or "<target_sample>" in row["sample_id"]:
             label = row["sample_id"].replace("_R1", "").replace("_watch_maker", "")
             ax.annotate(
                 label, (row["gene_enrichment_z"], row["n_psi_outliers"]),

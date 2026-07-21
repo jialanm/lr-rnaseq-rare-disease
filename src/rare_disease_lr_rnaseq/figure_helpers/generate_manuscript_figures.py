@@ -911,7 +911,7 @@ def _plot_alt5_shift_vs_novel(metrics_path: Path, outname: str, has_parents: boo
     outlier_mean = df["n_psi_outliers"].mean()
     outlier_std = df["n_psi_outliers"].std()
 
-    is_target = df["sample_id"].str.contains("RGP_1641_3")
+    is_target = df["sample_id"].str.contains("<target_sample>")
     df_other = df[~is_target]
     df_target = df[is_target]
 
@@ -960,7 +960,7 @@ def _plot_alt5_shift_vs_novel(metrics_path: Path, outname: str, has_parents: boo
         )
     handles += [
         Line2D([0], [0], marker="*", color="w", markerfacecolor=VIR_A,
-               markeredgecolor="black", markeredgewidth=0.3, markersize=3.5, label="RGP_1641_3"),
+               markeredgecolor="black", markeredgewidth=0.3, markersize=3.5, label="<target_sample>"),
         Line2D([0], [0], color="red", linestyle="--", linewidth=0.4, label="+2 SD"),
         Line2D([0], [0], color="blue", linestyle=":", linewidth=0.4, label="+3 SD"),
     ]
@@ -1059,7 +1059,7 @@ def plot_supplemental_3c() -> None:
     novel_mean = df["n_truly_novel_alt5"].mean()
     novel_std = df["n_truly_novel_alt5"].std()
 
-    is_target = df["sample_id"].str.contains("RGP_1641_3")
+    is_target = df["sample_id"].str.contains("<target_sample>")
     df_other = df[~is_target]
     df_target = df[is_target]
 
@@ -1100,7 +1100,7 @@ def plot_supplemental_3c() -> None:
         Line2D([0], [0], marker="o", color="w", markerfacecolor=VIR_B,
                markeredgecolor="black", markeredgewidth=0.3, markersize=2.5, label="Parent"),
         Line2D([0], [0], marker="*", color="w", markerfacecolor=VIR_A,
-               markeredgecolor="black", markeredgewidth=0.3, markersize=3.5, label="RGP_1641_3"),
+               markeredgecolor="black", markeredgewidth=0.3, markersize=3.5, label="<target_sample>"),
         Line2D([0], [0], color="red", linestyle="--", linewidth=0.4, label="+2 SD"),
         Line2D([0], [0], color="blue", linestyle=":", linewidth=0.4, label="+3 SD"),
     ]
@@ -1114,7 +1114,7 @@ def plot_supplemental_3c() -> None:
 
 
 
-FRASER_TARGET = {"RGP_607_3", "RGP_696_3_R1"}
+FRASER_TARGET = {"<sample_id_1>", "<sample_id_2>"}
 
 JACCARD_PATH = Path(DATA_DIR) / "filtered_p_value_0.3_deltapsi_0.1_whole_blood_jaccard_105_samples_pdj_0.3_deltapsi_0.1_results.csv"
 PSI3_PATH = Path(DATA_DIR) / "filtered_p_value_0.3_deltapsi_0.1_whole_blood_psi3_105_samples_pdj_0.3_deltapsi_0.1_results.csv"
@@ -1185,10 +1185,10 @@ JUNC_DIR = Path(DATA_DIR) / "outrider" / "all_junction_counts"
 GTEX_JUNC_PATH = Path(DATA_DIR) / "outrider" / "GTEX_blood.755_samples.normalized.junctions.bed.gz"
 
 SASHIMI_TARGETS = [
-    ("RGP_1724_2_R1", "GRK3", "CRYBB2P1", "chr22", 25520734, 25604376, "> 20 kb"),
-    ("RGP_2174_2_R1", "TRBC1", "TRBC2", "chr7", 142792081, 142801943, "2\u201320 kb"),
-    ("RGP_1724_1_R1", "TRAPPC5", "MCEMP1", "chr19", 7678984, 7682241, "< 2 kb"),
-    ("RGP_1604_1_R1", "CIMAP1B", "SCO2", "chr22", 50524425, 50529903, "2\u201320 kb"),
+    ("<sample_id_3>", "GRK3", "CRYBB2P1", "chr22", 25520734, 25604376, "> 20 kb"),
+    ("<sample_id_4>", "TRBC1", "TRBC2", "chr7", 142792081, 142801943, "2\u201320 kb"),
+    ("<sample_id_5>", "TRAPPC5", "MCEMP1", "chr19", 7678984, 7682241, "< 2 kb"),
+    ("<sample_id_6>", "CIMAP1B", "SCO2", "chr22", 50524425, 50529903, "2\u201320 kb"),
 ]
 
 

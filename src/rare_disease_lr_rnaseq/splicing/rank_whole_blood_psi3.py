@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 FILEPATH = f"{DATA_DIR}/filtered_p_value_0.3_deltapsi_0.1_whole_blood_psi3_105_samples_pdj_0.3_deltapsi_0.1_results.csv"
-TARGET = {"RGP_607_3", "RGP_696_3_R1"}
+TARGET = {"<sample_id_1>", "<sample_id_2>"}
 
 if __name__ == "__main__":
     psi3 = pd.read_csv(FILEPATH)

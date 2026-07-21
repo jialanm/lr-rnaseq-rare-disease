@@ -721,7 +721,7 @@ def plot_shift_vs_novel(
             if outlier_std > 0
             else 0
         )
-        if abs(row["gene_enrichment_z"]) > 2 or abs(yz) > 2 or row["sample_id"] == "RGP_1641_3_R1":
+        if abs(row["gene_enrichment_z"]) > 2 or abs(yz) > 2 or row["sample_id"] == "<target_sample>":
             ax.annotate(
                 row["sample_id"].replace("_R1", ""),
                 (row["gene_enrichment_z"], row["n_psi_outliers"]),
