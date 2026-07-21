@@ -158,36 +158,101 @@ def get_all_tx(sample_ids: list[str], rule_filter: bool = True) -> dict[str, pd.
     return tx
 
 
-def get_unique_tx(sample_ids: list[str], rule_filter: bool = True, tss_tolerance: int = 15,
-                  pas_tolerance: int = 25,
-                  force_recompute: bool = False) -> dict[str, pd.DataFrame]:
+def _greedy_cluster(group_df: pd.DataFrame, tss_tolerance: int, pas_tolerance: int) -> pd.DataFrame:
     """
-    Get unique (allowed for presence in the trio) transcripts for each sample.
+    Apply greedy seed-based clustering on a DataFrame group.
 
-    Uniqueness is defined using introns + terminals method:
-    - INTRONS: Must match EXACTLY (same coordinates)
-    - TERMINALS: Can differ within tolerance
-        * TSS (5' end) tolerance: <= tss_tolerance bp (default 15)
-        * PAS (3' end) tolerance: <= pas_tolerance bp (default 25)
+    :param group_df: DataFrame of transcripts sharing the same intron chain, with columns: tss, pas, length.
+    :param tss_tolerance: Maximum allowed TSS difference in base pairs.
+    :param pas_tolerance: Maximum allowed PAS difference in base pairs.
+    :return: Input DataFrame with an additional 'cluster_id' column.
+    """
+    if group_df.empty:
+        return group_df
 
-    Uses a greedy seed-based clustering algorithm (similar to isoseq collapse):
-    1. Group transcripts by (chrom, strand, exact intron chain)
-    2. Within each group, sort by length (descending)
-    3. First transcript becomes the Seed
-    4. Collapse any transcript matching the Seed (TSS/PAS within tolerance)
-    5. Remaining unmatched: next becomes new Seed, repeat
+    n = len(group_df)
 
-    A transcript is unique if its cluster appears in only one trio.
-    Mono-exon transcripts are excluded.
+    if n == 1:
+        group_df = group_df.copy()
+        group_df['cluster_id'] = 0
+        return group_df
+
+    sorted_df = group_df.sort_values('length', ascending=False).reset_index(drop=True)
+
+    cluster_ids = np.full(n, -1, dtype=np.int32)
+    tss_arr = sorted_df['tss'].values.astype(np.int64)
+    pas_arr = sorted_df['pas'].values.astype(np.int64)
+    current_cluster = 0
+
+    for i in range(n):
+        if cluster_ids[i] >= 0:
+            continue
+
+        seed_tss = tss_arr[i]
+        seed_pas = pas_arr[i]
+
+        unclustered_mask = cluster_ids < 0
+        if not unclustered_mask.any():
+            break
+
+        tss_diff = np.abs(tss_arr - seed_tss)
+        pas_diff = np.abs(pas_arr - seed_pas)
+        match_mask = unclustered_mask & (tss_diff <= tss_tolerance) & (pas_diff <= pas_tolerance)
+        cluster_ids[match_mask] = current_cluster
+
+        current_cluster += 1
+
+    sorted_df['cluster_id'] = cluster_ids
+    return sorted_df
+
+
+def _compute_features_cached(
+    gtf_df: pd.DataFrame, sample_id: str, cache: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """
+    Compute intron signature and terminal positions, with per-sample caching.
+
+    Delegates to :func:`compute_transcript_features_vectorized` and stores the
+    result in *cache* so repeated calls for the same sample are free.
+
+    :param gtf_df: GTF DataFrame with columns: transcript_id, feature, start, end, chrom, strand.
+    :param sample_id: Sample identifier used as cache key.
+    :param cache: Mutable dict used as the cache store.
+    :return: DataFrame with columns: transcript_id, chrom, strand, intron_signature, tss, pas, length.
+    """
+    if sample_id in cache:
+        return cache[sample_id]
+    features_df = compute_transcript_features_vectorized(gtf_df)
+    cache[sample_id] = features_df
+    return features_df
+
+
+def _find_unique_tx(
+    sample_ids: list[str],
+    group_col: str,
+    output_filepath: str,
+    rule_filter: bool,
+    tss_tolerance: int,
+    pas_tolerance: int,
+    force_recompute: bool,
+) -> dict[str, pd.DataFrame]:
+    """
+    Shared implementation for transcript uniqueness analysis.
+
+    Clusters transcripts by intron chain and terminal proximity, then marks a
+    transcript as unique if its cluster appears in only one group (defined by
+    *group_col*).
 
     :param sample_ids: List of sample identifiers.
+    :param group_col: Column used to define uniqueness groups ('trio_id' or 'sample_id').
+    :param output_filepath: Path where the cached JSON result is stored.
     :param rule_filter: Whether to use the rules-filtered SQANTI3 classification file.
     :param tss_tolerance: Maximum allowed TSS difference in base pairs for clustering.
     :param pas_tolerance: Maximum allowed PAS difference in base pairs for clustering.
     :param force_recompute: If True, delete the cached result and recompute.
     :return: Mapping of sample ID to DataFrame of unique transcripts.
     """
-    output_filepath = f"{DATA_DIR}/unique_transcripts_intron_terminal.json"
+    uniqueness_col = 'unique_tx' if group_col == 'trio_id' else 'individual_unique_tx'
 
     if force_recompute and os.path.exists(output_filepath):
         logger.info(f"Force recompute: deleting cache {output_filepath}")
@@ -196,216 +261,81 @@ def get_unique_tx(sample_ids: list[str], rule_filter: bool = True, tss_tolerance
     if os.path.exists(output_filepath):
         with open(output_filepath, "r") as f:
             serialized_tx = json.load(f)
-            uniq_tx = {sample_id: pd.DataFrame(records)
-                       for sample_id, records in serialized_tx.items()}
-            uniq_tx = {sample_id: df for sample_id, df in uniq_tx.items() if sample_id in sample_ids}
+            uniq_tx = {sid: pd.DataFrame(records)
+                       for sid, records in serialized_tx.items()}
+            uniq_tx = {sid: df for sid, df in uniq_tx.items() if sid in sample_ids}
             return uniq_tx
 
-    tx_df_cache = {}
-    gtf_cache = {}
-    features_df_cache = {}
+    tx_df_cache: dict[str, pd.DataFrame] = {}
+    gtf_cache: dict[str, pd.DataFrame] = {}
+    features_df_cache: dict[str, pd.DataFrame] = {}
 
     def get_cached_data(sample_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Get cached transcript DataFrame and GTF data for a sample.
-
-        :param sample_id: Sample identifier.
-        :return: Tuple of (SQANTI3 annotated transcript DataFrame, GTF DataFrame).
-        """
         if sample_id not in tx_df_cache:
             tx_df_cache[sample_id] = read_sqanti3_annotated(sample_id, rule_filter)
             gtf_cache[sample_id] = read_gtf(sample_id)
         return tx_df_cache[sample_id], gtf_cache[sample_id]
 
-    def compute_transcript_features_vectorized(gtf_df: pd.DataFrame, sample_id: str) -> pd.DataFrame:
-        """
-        Compute intron signature and terminal positions using vectorized operations.
+    # --- Build feature table for every sample ---
+    all_features_list: list[pd.DataFrame] = []
 
-        Excludes mono-exon transcripts. Results are cached by sample_id.
+    if group_col == 'trio_id':
+        trio_ids = set(["_".join(f.split("_")[:2]) for f in sample_ids])
+        for cur_trio in trio_ids:
+            logger.info(f"Processing trio {cur_trio}")
+            for count in range(1, 4):
+                cur_sample = f"{cur_trio}_{count}_R1"
+                logger.info(f"  {cur_sample}")
 
-        :param gtf_df: GTF DataFrame with columns: transcript_id, feature, start, end, chrom, strand.
-        :param sample_id: Sample identifier used for caching.
-        :return: DataFrame with columns: transcript_id, chrom, strand, intron_signature, tss, pas, length.
-        """
-        if sample_id in features_df_cache:
-            return features_df_cache[sample_id]
+                cur_tx_df, cur_gtf = get_cached_data(cur_sample)
+                features_df = _compute_features_cached(cur_gtf, cur_sample, features_df_cache)
 
-        exon_gtf = gtf_df[gtf_df["feature"] == "exon"].copy()
-        logger.info(f"      [DEBUG] exon rows: {len(exon_gtf)}, unique features: {gtf_df['feature'].unique().tolist()}")
+                if features_df.empty:
+                    logger.info(f"    WARNING: No multi-exon transcripts found in GTF")
+                    continue
 
-        if exon_gtf.empty:
-            logger.info(f"      [DEBUG] No exon features found in GTF!")
-            features_df_cache[sample_id] = pd.DataFrame()
-            return features_df_cache[sample_id]
+                valid_tx = set(cur_tx_df['isoform'])
+                features_df = features_df[features_df['transcript_id'].isin(valid_tx)].copy()
 
-        exon_gtf = exon_gtf.sort_values(['transcript_id', 'start']).reset_index(drop=True)
+                if features_df.empty:
+                    logger.info(f"    WARNING: No transcripts matched between GTF and tx_df")
+                    continue
 
-        exon_counts = exon_gtf.groupby('transcript_id', sort=False).size()
-        multi_exon_tx = exon_counts[exon_counts >= 2].index
-        logger.info(f"      [DEBUG] total transcripts: {len(exon_counts)}, multi-exon: {len(multi_exon_tx)}")
+                features_df['sample_id'] = cur_sample
+                features_df['trio_id'] = cur_trio
+                all_features_list.append(features_df)
+    else:
+        for cur_sample in sample_ids:
+            logger.info(f"Processing sample {cur_sample}")
 
-        exon_gtf = exon_gtf[exon_gtf['transcript_id'].isin(multi_exon_tx)].reset_index(drop=True)
-
-        if exon_gtf.empty:
-            logger.info(f"      [DEBUG] All transcripts are mono-exon!")
-            features_df_cache[sample_id] = pd.DataFrame()
-            return features_df_cache[sample_id]
-
-        # Mark last exon per transcript (boundary detection)
-        tx_ids = exon_gtf['transcript_id'].values
-        is_last = np.concatenate([tx_ids[:-1] != tx_ids[1:], [True]])
-
-        # Compute introns: intron_start = exon_end, intron_end = next_exon_start
-        # Only for non-last exons within each transcript
-        exon_ends = exon_gtf['end'].values
-        exon_starts = exon_gtf['start'].values
-        next_starts = np.roll(exon_starts, -1)
-
-        intron_mask = ~is_last
-        intron_tx_ids = tx_ids[intron_mask]
-        intron_starts_arr = exon_ends[intron_mask]
-        intron_ends_arr = next_starts[intron_mask]
-
-        # Build intron signature per transcript using efficient string aggregation
-        if len(intron_tx_ids) > 0:
-            intron_pairs = [f"{s},{e}" for s, e in zip(intron_starts_arr, intron_ends_arr)]
-            intron_df = pd.DataFrame({
-                'transcript_id': intron_tx_ids,
-                'intron_pair': intron_pairs,
-            })
-            intron_sig_strs = intron_df.groupby('transcript_id', sort=False)['intron_pair'].agg('|'.join)
-
-            def parse_intron_sig(s: str) -> tuple[tuple[int, ...], ...]:
-                """
-                Parse a pipe-delimited intron signature string.
-
-                :param s: Pipe-delimited intron pairs, e.g. "100,200|300,400".
-                :return: Tuple of (start, end) integer tuples.
-                """
-                return tuple(tuple(map(int, p.split(','))) for p in s.split('|'))
-
-            intron_sigs = intron_sig_strs.apply(parse_intron_sig)
-            intron_sigs.name = 'intron_signature'
-        else:
-            intron_sigs = pd.Series(name='intron_signature', dtype=object)
-
-        # Compute exon lengths first, then aggregate (avoid slow lambda)
-        exon_gtf = exon_gtf.copy()
-        exon_gtf['exon_length'] = exon_gtf['end'] - exon_gtf['start']
-
-        agg_df = exon_gtf.groupby('transcript_id', sort=False).agg(
-            chrom=('chrom', 'first'),
-            strand=('strand', 'first'),
-            genomic_start=('start', 'first'),
-            genomic_end=('end', 'last'),
-            length=('exon_length', 'sum')
-        ).reset_index()
-
-        # TSS/PAS swap based on strand: plus strand TSS=start, minus strand TSS=end
-        plus_mask = agg_df['strand'] == '+'
-        agg_df['tss'] = np.where(plus_mask, agg_df['genomic_start'], agg_df['genomic_end'])
-        agg_df['pas'] = np.where(plus_mask, agg_df['genomic_end'], agg_df['genomic_start'])
-
-        features_df = agg_df.merge(intron_sigs, on='transcript_id', how='left')
-        features_df = features_df[['transcript_id', 'chrom', 'strand', 'intron_signature', 'tss', 'pas', 'length']]
-
-        features_df_cache[sample_id] = features_df
-        return features_df
-
-    def greedy_cluster_vectorized(group_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Apply greedy seed-based clustering on a DataFrame group.
-
-        :param group_df: DataFrame of transcripts sharing the same intron chain, with columns: tss, pas, length.
-        :return: Input DataFrame with an additional 'cluster_id' column.
-        """
-        if group_df.empty:
-            return group_df
-
-        n = len(group_df)
-
-        if n == 1:
-            group_df = group_df.copy()
-            group_df['cluster_id'] = 0
-            return group_df
-
-        sorted_df = group_df.sort_values('length', ascending=False).reset_index(drop=True)
-
-        cluster_ids = np.full(n, -1, dtype=np.int32)
-        tss_arr = sorted_df['tss'].values.astype(np.int64)
-        pas_arr = sorted_df['pas'].values.astype(np.int64)
-        current_cluster = 0
-
-        for i in range(n):
-            if cluster_ids[i] >= 0:
-                continue
-
-            seed_tss = tss_arr[i]
-            seed_pas = pas_arr[i]
-
-            unclustered_mask = cluster_ids < 0
-            if not unclustered_mask.any():
-                break
-
-            tss_diff = np.abs(tss_arr - seed_tss)
-            pas_diff = np.abs(pas_arr - seed_pas)
-            match_mask = unclustered_mask & (tss_diff <= tss_tolerance) & (pas_diff <= pas_tolerance)
-            cluster_ids[match_mask] = current_cluster
-
-            current_cluster += 1
-
-        sorted_df['cluster_id'] = cluster_ids
-        return sorted_df
-
-    trio_ids = set(["_".join(f.split("_")[:2]) for f in sample_ids])
-
-    all_features_list = []
-
-    for cur_trio in trio_ids:
-        logger.info(f"Processing trio {cur_trio}")
-        sample_ids_in_trio = [f"{cur_trio}_{count}_R1" for count in range(1, 4)]
-
-        for cur_sample_in_trio in sample_ids_in_trio:
-            logger.info(f"  {cur_sample_in_trio}")
-
-            cur_tx_df, cur_gtf = get_cached_data(cur_sample_in_trio)
-            logger.info(f"    tx_df shape: {cur_tx_df.shape}, gtf shape: {cur_gtf.shape}")
-
-            features_df = compute_transcript_features_vectorized(cur_gtf, cur_sample_in_trio)
-            logger.info(f"    features_df shape: {features_df.shape if not features_df.empty else 'EMPTY'}")
+            cur_tx_df, cur_gtf = get_cached_data(cur_sample)
+            features_df = _compute_features_cached(cur_gtf, cur_sample, features_df_cache)
 
             if features_df.empty:
                 logger.info(f"    WARNING: No multi-exon transcripts found in GTF")
                 continue
 
             valid_tx = set(cur_tx_df['isoform'])
-            logger.info(f"    valid_tx count: {len(valid_tx)}")
-            pre_filter_count = len(features_df)
             features_df = features_df[features_df['transcript_id'].isin(valid_tx)].copy()
-            logger.info(f"    after filtering: {len(features_df)} / {pre_filter_count} transcripts")
 
             if features_df.empty:
                 logger.info(f"    WARNING: No transcripts matched between GTF and tx_df")
                 continue
 
-            features_df['sample_id'] = cur_sample_in_trio
-            features_df['trio_id'] = cur_trio
-
+            features_df['sample_id'] = cur_sample
             all_features_list.append(features_df)
 
     if not all_features_list:
-        logger.info("WARNING: No features found for any transcripts. Check if GTF files have multi-exon transcripts.")
-        # Write empty cache to avoid repeated recomputation
-        empty_result = {sample_id: pd.DataFrame() for sample_id in sample_ids}
+        logger.info("WARNING: No features found for any transcripts.")
+        empty_result = {sid: pd.DataFrame() for sid in sample_ids}
         with open(output_filepath, "w") as f:
             json.dump({sid: [] for sid in sample_ids}, f, indent=2)
         return empty_result
 
     logger.info(f"Collected {len(all_features_list)} feature DataFrames")
-
     all_features_df = pd.concat(all_features_list, ignore_index=True)
 
-    # Create group key using integer factorization (faster than string concat)
+    # --- Cluster ---
     all_features_df['intron_sig_str'] = all_features_df['intron_signature'].astype(str)
 
     group_keys, _ = pd.factorize(
@@ -417,27 +347,26 @@ def get_unique_tx(sample_ids: list[str], rule_filter: bool = True, tss_tolerance
 
     logger.info("Applying greedy clustering...")
     clustered_df = all_features_df.groupby('group_key', group_keys=False, sort=False).apply(
-        greedy_cluster_vectorized
+        lambda g: _greedy_cluster(g, tss_tolerance, pas_tolerance)
     ).reset_index(drop=True)
 
-    # Create unique cluster identifier using integer arithmetic (faster than string concat)
     max_clusters = clustered_df['cluster_id'].max() + 1 if len(clustered_df) > 0 else 1
     clustered_df['global_cluster_id'] = (
         clustered_df['group_key'].astype(np.int64) * max_clusters +
         clustered_df['cluster_id'].astype(np.int64)
     )
 
-    trio_counts = clustered_df.groupby('global_cluster_id', sort=False)['trio_id'].nunique()
-    clustered_df['trio_count'] = clustered_df['global_cluster_id'].map(trio_counts)
+    # --- Mark uniqueness ---
+    group_counts = clustered_df.groupby('global_cluster_id', sort=False)[group_col].nunique()
+    clustered_df['_group_count'] = clustered_df['global_cluster_id'].map(group_counts)
+    clustered_df[uniqueness_col] = clustered_df['_group_count'] == 1
 
-    clustered_df['unique_tx'] = clustered_df['trio_count'] == 1
-
-    # Create lookup using MultiIndex for faster access
+    # --- Build per-sample result ---
     clustered_df = clustered_df.set_index(['sample_id', 'transcript_id'])
-    uniqueness_map = clustered_df['unique_tx']
+    uniqueness_map = clustered_df[uniqueness_col]
     intron_sig_map = clustered_df['intron_sig_str']
 
-    unique_tx = {}
+    result: dict[str, pd.DataFrame] = {}
     for cur_sample in sample_ids:
         logger.info(f"Filtering unique for {cur_sample}")
         cur_tx_df, _ = get_cached_data(cur_sample)
@@ -449,20 +378,44 @@ def get_unique_tx(sample_ids: list[str], rule_filter: bool = True, tss_tolerance
             cur_tx_df['isoform']
         ])
 
-        cur_tx_df['unique_tx'] = uniqueness_map.reindex(lookup_idx).fillna(False).values
+        cur_tx_df[uniqueness_col] = uniqueness_map.reindex(lookup_idx).fillna(False).values
         cur_tx_df['intron_signature'] = intron_sig_map.reindex(lookup_idx).values
         cur_tx_df = cur_tx_df.drop(columns=['_sample_id'])
 
-        unique_tx[cur_sample] = cur_tx_df[cur_tx_df['unique_tx']]
+        result[cur_sample] = cur_tx_df[cur_tx_df[uniqueness_col]]
 
-    serializable_tx = {}
-    for sample_id, df in unique_tx.items():
-        serializable_tx[sample_id] = df.to_dict(orient='records')
-
+    serializable_tx = {sid: df.to_dict(orient='records') for sid, df in result.items()}
     with open(output_filepath, "w") as f:
         json.dump(serializable_tx, f, indent=2)
 
-    return unique_tx
+    return result
+
+
+def get_unique_tx(sample_ids: list[str], rule_filter: bool = True, tss_tolerance: int = 15,
+                  pas_tolerance: int = 25,
+                  force_recompute: bool = False) -> dict[str, pd.DataFrame]:
+    """
+    Get trio-unique transcripts for each sample.
+
+    A transcript is unique if its cluster (by intron chain and terminal
+    proximity) appears in only one trio. Mono-exon transcripts are excluded.
+
+    :param sample_ids: List of sample identifiers.
+    :param rule_filter: Whether to use the rules-filtered SQANTI3 classification file.
+    :param tss_tolerance: Maximum allowed TSS difference in base pairs for clustering.
+    :param pas_tolerance: Maximum allowed PAS difference in base pairs for clustering.
+    :param force_recompute: If True, delete the cached result and recompute.
+    :return: Mapping of sample ID to DataFrame of unique transcripts.
+    """
+    return _find_unique_tx(
+        sample_ids,
+        group_col='trio_id',
+        output_filepath=f"{DATA_DIR}/unique_transcripts_intron_terminal.json",
+        rule_filter=rule_filter,
+        tss_tolerance=tss_tolerance,
+        pas_tolerance=pas_tolerance,
+        force_recompute=force_recompute,
+    )
 
 
 def get_individual_unique_tx(sample_ids: list[str], rule_filter: bool = True,
@@ -471,24 +424,9 @@ def get_individual_unique_tx(sample_ids: list[str], rule_filter: bool = True,
     """
     Get individual-unique transcripts for each sample.
 
-    A transcript is considered "individual-unique" if it does NOT match any
-    transcript in ANY other individual across the entire cohort.
-
-    Uniqueness is defined using introns + terminals method:
-    - INTRONS: Must match EXACTLY (same coordinates)
-    - TERMINALS: Can differ within tolerance
-        * TSS (5' end) tolerance: <= tss_tolerance bp (default 15)
-        * PAS (3' end) tolerance: <= pas_tolerance bp (default 25)
-
-    Uses a greedy seed-based clustering algorithm (similar to isoseq collapse):
-    1. Group transcripts by (chrom, strand, exact intron chain)
-    2. Within each group, sort by length (descending)
-    3. First transcript becomes the Seed
-    4. Collapse any transcript matching the Seed (TSS/PAS within tolerance)
-    5. Remaining unmatched: next becomes new Seed, repeat
-
-    A transcript is individual-unique if its cluster contains only ONE sample
-    (individual). Mono-exon transcripts are excluded.
+    A transcript is individual-unique if its cluster (by intron chain and
+    terminal proximity) contains only one sample. Mono-exon transcripts are
+    excluded.
 
     :param sample_ids: List of sample identifiers.
     :param rule_filter: Whether to use the rules-filtered SQANTI3 classification file.
@@ -497,276 +435,15 @@ def get_individual_unique_tx(sample_ids: list[str], rule_filter: bool = True,
     :param force_recompute: If True, delete the cached result and recompute.
     :return: Mapping of sample ID to DataFrame of individual-unique transcripts.
     """
-    output_filepath = f"{DATA_DIR}/individual_unique_transcripts.json"
-
-    if force_recompute and os.path.exists(output_filepath):
-        logger.info(f"Force recompute: deleting cache {output_filepath}")
-        os.remove(output_filepath)
-
-    if os.path.exists(output_filepath):
-        with open(output_filepath, "r") as f:
-            serialized_tx = json.load(f)
-            uniq_tx = {sample_id: pd.DataFrame(records)
-                       for sample_id, records in serialized_tx.items()}
-            uniq_tx = {sample_id: df for sample_id, df in uniq_tx.items() if sample_id in sample_ids}
-            return uniq_tx
-
-    tx_df_cache = {}
-    gtf_cache = {}
-    features_df_cache = {}
-
-    def get_cached_data(sample_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Get cached transcript DataFrame and GTF data for a sample.
-
-        :param sample_id: Sample identifier.
-        :return: Tuple of (SQANTI3 annotated transcript DataFrame, GTF DataFrame).
-        """
-        if sample_id not in tx_df_cache:
-            tx_df_cache[sample_id] = read_sqanti3_annotated(sample_id, rule_filter)
-            gtf_cache[sample_id] = read_gtf(sample_id)
-        return tx_df_cache[sample_id], gtf_cache[sample_id]
-
-    def compute_transcript_features_vectorized(gtf_df: pd.DataFrame, sample_id: str) -> pd.DataFrame:
-        """
-        Compute intron signature and terminal positions using vectorized operations.
-
-        Excludes mono-exon transcripts. Results are cached by sample_id.
-
-        :param gtf_df: GTF DataFrame with columns: transcript_id, feature, start, end, chrom, strand.
-        :param sample_id: Sample identifier used for caching.
-        :return: DataFrame with columns: transcript_id, chrom, strand, intron_signature, tss, pas, length.
-        """
-        if sample_id in features_df_cache:
-            return features_df_cache[sample_id]
-
-        exon_gtf = gtf_df[gtf_df["feature"] == "exon"].copy()
-        logger.info(f"      [DEBUG] exon rows: {len(exon_gtf)}, unique features: {gtf_df['feature'].unique().tolist()}")
-
-        if exon_gtf.empty:
-            logger.info(f"      [DEBUG] No exon features found in GTF!")
-            features_df_cache[sample_id] = pd.DataFrame()
-            return features_df_cache[sample_id]
-
-        exon_gtf = exon_gtf.sort_values(['transcript_id', 'start']).reset_index(drop=True)
-
-        exon_counts = exon_gtf.groupby('transcript_id', sort=False).size()
-        multi_exon_tx = exon_counts[exon_counts >= 2].index
-        logger.info(f"      [DEBUG] total transcripts: {len(exon_counts)}, multi-exon: {len(multi_exon_tx)}")
-
-        exon_gtf = exon_gtf[exon_gtf['transcript_id'].isin(multi_exon_tx)].reset_index(drop=True)
-
-        if exon_gtf.empty:
-            logger.info(f"      [DEBUG] All transcripts are mono-exon!")
-            features_df_cache[sample_id] = pd.DataFrame()
-            return features_df_cache[sample_id]
-
-        # Mark last exon per transcript (boundary detection)
-        tx_ids = exon_gtf['transcript_id'].values
-        is_last = np.concatenate([tx_ids[:-1] != tx_ids[1:], [True]])
-
-        # Compute introns: intron_start = exon_end, intron_end = next_exon_start
-        # Only for non-last exons within each transcript
-        exon_ends = exon_gtf['end'].values
-        exon_starts = exon_gtf['start'].values
-        next_starts = np.roll(exon_starts, -1)
-
-        intron_mask = ~is_last
-        intron_tx_ids = tx_ids[intron_mask]
-        intron_starts_arr = exon_ends[intron_mask]
-        intron_ends_arr = next_starts[intron_mask]
-
-        # Build intron signature per transcript using efficient string aggregation
-        if len(intron_tx_ids) > 0:
-            intron_pairs = [f"{s},{e}" for s, e in zip(intron_starts_arr, intron_ends_arr)]
-            intron_df = pd.DataFrame({
-                'transcript_id': intron_tx_ids,
-                'intron_pair': intron_pairs,
-            })
-            intron_sig_strs = intron_df.groupby('transcript_id', sort=False)['intron_pair'].agg('|'.join)
-
-            def parse_intron_sig(s: str) -> tuple[tuple[int, ...], ...]:
-                """
-                Parse a pipe-delimited intron signature string.
-
-                :param s: Pipe-delimited intron pairs, e.g. "100,200|300,400".
-                :return: Tuple of (start, end) integer tuples.
-                """
-                return tuple(tuple(map(int, p.split(','))) for p in s.split('|'))
-
-            intron_sigs = intron_sig_strs.apply(parse_intron_sig)
-            intron_sigs.name = 'intron_signature'
-        else:
-            intron_sigs = pd.Series(name='intron_signature', dtype=object)
-
-        # Compute exon lengths first, then aggregate (avoid slow lambda)
-        exon_gtf = exon_gtf.copy()
-        exon_gtf['exon_length'] = exon_gtf['end'] - exon_gtf['start']
-
-        agg_df = exon_gtf.groupby('transcript_id', sort=False).agg(
-            chrom=('chrom', 'first'),
-            strand=('strand', 'first'),
-            genomic_start=('start', 'first'),
-            genomic_end=('end', 'last'),
-            length=('exon_length', 'sum')
-        ).reset_index()
-
-        # TSS/PAS swap based on strand: plus strand TSS=start, minus strand TSS=end
-        plus_mask = agg_df['strand'] == '+'
-        agg_df['tss'] = np.where(plus_mask, agg_df['genomic_start'], agg_df['genomic_end'])
-        agg_df['pas'] = np.where(plus_mask, agg_df['genomic_end'], agg_df['genomic_start'])
-
-        features_df = agg_df.merge(intron_sigs, on='transcript_id', how='left')
-        features_df = features_df[['transcript_id', 'chrom', 'strand', 'intron_signature', 'tss', 'pas', 'length']]
-
-        features_df_cache[sample_id] = features_df
-        return features_df
-
-    def greedy_cluster_vectorized(group_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Apply greedy seed-based clustering on a DataFrame group.
-
-        :param group_df: DataFrame of transcripts sharing the same intron chain, with columns: tss, pas, length.
-        :return: Input DataFrame with an additional 'cluster_id' column.
-        """
-        if group_df.empty:
-            return group_df
-
-        n = len(group_df)
-
-        if n == 1:
-            group_df = group_df.copy()
-            group_df['cluster_id'] = 0
-            return group_df
-
-        sorted_df = group_df.sort_values('length', ascending=False).reset_index(drop=True)
-
-        cluster_ids = np.full(n, -1, dtype=np.int32)
-        tss_arr = sorted_df['tss'].values.astype(np.int64)
-        pas_arr = sorted_df['pas'].values.astype(np.int64)
-        current_cluster = 0
-
-        for i in range(n):
-            if cluster_ids[i] >= 0:
-                continue
-
-            seed_tss = tss_arr[i]
-            seed_pas = pas_arr[i]
-
-            unclustered_mask = cluster_ids < 0
-            if not unclustered_mask.any():
-                break
-
-            tss_diff = np.abs(tss_arr - seed_tss)
-            pas_diff = np.abs(pas_arr - seed_pas)
-            match_mask = unclustered_mask & (tss_diff <= tss_tolerance) & (pas_diff <= pas_tolerance)
-            cluster_ids[match_mask] = current_cluster
-
-            current_cluster += 1
-
-        sorted_df['cluster_id'] = cluster_ids
-        return sorted_df
-
-    all_features_list = []
-
-    for cur_sample in sample_ids:
-        logger.info(f"Processing sample {cur_sample}")
-
-        cur_tx_df, cur_gtf = get_cached_data(cur_sample)
-        logger.info(f"    tx_df shape: {cur_tx_df.shape}, gtf shape: {cur_gtf.shape}")
-
-        features_df = compute_transcript_features_vectorized(cur_gtf, cur_sample)
-        logger.info(f"    features_df shape: {features_df.shape if not features_df.empty else 'EMPTY'}")
-
-        if features_df.empty:
-            logger.info(f"    WARNING: No multi-exon transcripts found in GTF")
-            continue
-
-        valid_tx = set(cur_tx_df['isoform'])
-        logger.info(f"    valid_tx count: {len(valid_tx)}")
-        pre_filter_count = len(features_df)
-        features_df = features_df[features_df['transcript_id'].isin(valid_tx)].copy()
-        logger.info(f"    after filtering: {len(features_df)} / {pre_filter_count} transcripts")
-
-        if features_df.empty:
-            logger.info(f"    WARNING: No transcripts matched between GTF and tx_df")
-            continue
-
-        features_df['sample_id'] = cur_sample
-
-        all_features_list.append(features_df)
-
-    if not all_features_list:
-        logger.info("WARNING: No features found for any transcripts. Check if GTF files have multi-exon transcripts.")
-        # Write empty cache to avoid repeated recomputation
-        empty_result = {sample_id: pd.DataFrame() for sample_id in sample_ids}
-        with open(output_filepath, "w") as f:
-            json.dump({sid: [] for sid in sample_ids}, f, indent=2)
-        return empty_result
-
-    logger.info(f"Collected {len(all_features_list)} feature DataFrames")
-
-    all_features_df = pd.concat(all_features_list, ignore_index=True)
-
-    # Create group key using integer factorization (faster than string concat)
-    all_features_df['intron_sig_str'] = all_features_df['intron_signature'].astype(str)
-
-    group_keys, _ = pd.factorize(
-        all_features_df['chrom'].astype(str) + '|' +
-        all_features_df['strand'].astype(str) + '|' +
-        all_features_df['intron_sig_str']
+    return _find_unique_tx(
+        sample_ids,
+        group_col='sample_id',
+        output_filepath=f"{DATA_DIR}/individual_unique_transcripts.json",
+        rule_filter=rule_filter,
+        tss_tolerance=tss_tolerance,
+        pas_tolerance=pas_tolerance,
+        force_recompute=force_recompute,
     )
-    all_features_df['group_key'] = group_keys
-
-    logger.info("Applying greedy clustering...")
-    clustered_df = all_features_df.groupby('group_key', group_keys=False, sort=False).apply(
-        greedy_cluster_vectorized
-    ).reset_index(drop=True)
-
-    # Create unique cluster identifier using integer arithmetic (faster than string concat)
-    max_clusters = clustered_df['cluster_id'].max() + 1 if len(clustered_df) > 0 else 1
-    clustered_df['global_cluster_id'] = (
-        clustered_df['group_key'].astype(np.int64) * max_clusters +
-        clustered_df['cluster_id'].astype(np.int64)
-    )
-
-    # KEY DIFFERENCE from get_unique_tx: count by sample_id instead of trio_id
-    sample_counts = clustered_df.groupby('global_cluster_id', sort=False)['sample_id'].nunique()
-    clustered_df['sample_count'] = clustered_df['global_cluster_id'].map(sample_counts)
-
-    clustered_df['individual_unique_tx'] = clustered_df['sample_count'] == 1
-
-    # Create lookup using MultiIndex for faster access
-    clustered_df = clustered_df.set_index(['sample_id', 'transcript_id'])
-    uniqueness_map = clustered_df['individual_unique_tx']
-    intron_sig_map = clustered_df['intron_sig_str']
-
-    individual_unique_tx = {}
-    for cur_sample in sample_ids:
-        logger.info(f"Filtering individual-unique for {cur_sample}")
-        cur_tx_df, _ = get_cached_data(cur_sample)
-        cur_tx_df = cur_tx_df.copy()
-
-        cur_tx_df['_sample_id'] = cur_sample
-        lookup_idx = pd.MultiIndex.from_arrays([
-            cur_tx_df['_sample_id'],
-            cur_tx_df['isoform']
-        ])
-
-        cur_tx_df['individual_unique_tx'] = uniqueness_map.reindex(lookup_idx).fillna(False).values
-        cur_tx_df['intron_signature'] = intron_sig_map.reindex(lookup_idx).values
-        cur_tx_df = cur_tx_df.drop(columns=['_sample_id'])
-
-        individual_unique_tx[cur_sample] = cur_tx_df[cur_tx_df['individual_unique_tx']]
-
-    serializable_tx = {}
-    for sample_id, df in individual_unique_tx.items():
-        serializable_tx[sample_id] = df.to_dict(orient='records')
-
-    with open(output_filepath, "w") as f:
-        json.dump(serializable_tx, f, indent=2)
-
-    return individual_unique_tx
 
 
 def get_long_read_sample_ids() -> list[str]:
@@ -929,6 +606,7 @@ def map_gene_ids_to_gencode_gene_name_gtf(gene_ids: list[str], gtf_file_path: st
 
             gene_id = None
             gene_name = None
+            gene_type = None
 
             for part in attributes.split(';'):
                 part = part.strip()
@@ -939,7 +617,7 @@ def map_gene_ids_to_gencode_gene_name_gtf(gene_ids: list[str], gtf_file_path: st
                 elif part.startswith('gene_type'):
                     gene_type = part.split('"')[1]
 
-            if gene_id and gene_name:
+            if gene_id and gene_name and gene_type:
                 gene_id_to_gene_name[gene_id] = [gene_name, gene_type]
                 # Also store without version number for ENSG lookups without version suffix
                 gene_id_to_gene_name[gene_id.split('.')[0]] = [gene_name, gene_type]
