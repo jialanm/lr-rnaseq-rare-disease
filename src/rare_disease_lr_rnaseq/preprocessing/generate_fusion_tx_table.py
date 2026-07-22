@@ -11,14 +11,12 @@ from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 from pycirclize import Circos
 import seaborn as sns
+from rare_disease_lr_rnaseq.config import GENCODE_GTF_FILEPATH, MENDELIAN_GENE_DISEASE_TABLE_FILEPATH
 from rare_disease_lr_rnaseq.utils import DATA_DIR, get_long_read_sample_ids, read_gtf, read_sqanti3_annotated
 
 import logging
 
 logger = logging.getLogger(__name__)
-
-GENCODE_GTF_FILEPATH = f"{DATA_DIR}/gencode.v47.annotation.gtf.gz"
-MENDELIAN_GENE_DISEASE_TABLE_FILEPATH = f"{DATA_DIR}/mendelian_gene_disease_table_1_16_2026.tsv"
 CLINGEN_EVIDENCE = {"Definitive", "Strong", "Moderate", "Limited"}
 
 # Okabe-Ito colorblind-safe palette for scientific figures

@@ -13,10 +13,20 @@ import hailtop.fs as hfs
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tgg_rnaseq_pipelines.rnaseq_sample_metadata.metadata_utils import (
+    DATA_PATHS_TABLE_ID,
+    DATA_PATHS_VIEW_ID,
+    RNA_SEQ_BASE_ID,
+    read_from_airtable,
+)
 
-from rare_disease_lr_rnaseq.config import DOCKER_GCLOUD_R, GCS_REF_GTF, GCS_TMP_BUCKET
+from rare_disease_lr_rnaseq.config import (
+    DOCKER_GCLOUD_R,
+    GCS_REF_GTF,
+    GCS_TMP_BUCKET,
+    MENDELIAN_GENE_DISEASE_TABLE_FILEPATH,
+)
 from rare_disease_lr_rnaseq.utils import DATA_DIR, create_symbolic_links
-from tgg_rnaseq_pipelines.rnaseq_sample_metadata.metadata_utils import read_from_airtable, RNA_SEQ_BASE_ID, DATA_PATHS_TABLE_ID, DATA_PATHS_VIEW_ID
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +36,6 @@ DEFAULT_MEMORY = "standard"
 N_BINS = 100
 
 GTF_FILEPATH = GCS_REF_GTF
-MENDELIAN_GENE_DISEASE_TABLE_FILEPATH = f"{DATA_DIR}/mendelian_gene_disease_table_1_16_2026.tsv"
 CLINGEN_EVIDENCE = {"Definitive", "Strong", "Moderate"}
 
 

@@ -13,7 +13,7 @@ import pandas as pd
 from rare_disease_lr_rnaseq.splicing.fraser2_rscripts import count_split_reads_single_sample_r, \
     count_reads_all_samples_r, run_fraser_r
 from rare_disease_lr_rnaseq.utils import get_long_read_sample_ids, DATA_DIR
-from rare_disease_lr_rnaseq.config import DOCKER_FRASER2, DOCKER_FRASER1, GCS_BAM_DIR, GCS_TMP_BUCKET
+from rare_disease_lr_rnaseq.config import DOCKER_FRASER2, DOCKER_FRASER1, GCS_BAM_DIR, GCS_TMP_BUCKET, GCS_GCS_GENE_MODELS_GFF, METADATA_FILEPATH
 
 import logging
 
@@ -29,8 +29,6 @@ DEFAULT_MEMORY = "highmem"
 PER_BAM_SIZE = 50
 DEFAULT_STORAGE = f"{PER_BAM_SIZE}G"
 SPLIT_READS_DIR = f"{GCS_TMP_BUCKET}/fraser_split_reads"
-
-GENE_MODELS_GFF = f"{GCS_TMP_BUCKET}/ref/gencode.v39.annotation.without_version_numbers.gff3.gz"
 
 
 DELTA_PSI_THRESHOLD_INIT_FILTERING = 0.05
@@ -57,7 +55,7 @@ def get_sample_rows_from_longread_bams(
     sample_ids = get_long_read_sample_ids()
     logger.info(f"Found {len(sample_ids)} sample IDs from utils.py")
 
-    metadata_path = f"{DATA_DIR}/metadata.tsv"
+    metadata_path = METADATA_FILEPATH
     metadata_df = pd.read_csv(metadata_path, sep='\t')
     sex_map = dict(zip(metadata_df['entity:Sample_ID'], metadata_df['Gender']))
 
@@ -308,8 +306,8 @@ def run_fraser(
     cur_job.command(f"tar xzf savedObjects.tar.gz")
     cur_job.command("ls -lh")
 
-    gene_models_gff_path = os.path.basename(GENE_MODELS_GFF)
-    create_symbolic_links(cur_job, GENE_MODELS_GFF, gene_models_gff_path, requester_pays_project)
+    gene_models_gff_path = os.path.basename(GCS_GENE_MODELS_GFF)
+    create_symbolic_links(cur_job, GCS_GENE_MODELS_GFF, gene_models_gff_path, requester_pays_project)
 
     prefix = f"longread_{cur_type}_{num_samples}_samples_" \
              f"pdj_{PADJ_THRESHOLD}_deltapsi_{DELTA_PSI_THRESHOLD_RESULT_TABLE}"

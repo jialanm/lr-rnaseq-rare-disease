@@ -13,6 +13,7 @@ import pandas as pd
 import pysam
 import seaborn as sns
 
+from rare_disease_lr_rnaseq.config import READS_SUMMARY_FILEPATH, GTEX_JUNCTIONS_FILEPATH
 from rare_disease_lr_rnaseq.utils import DATA_DIR, get_long_read_sample_ids, read_sqanti3_annotated, get_unique_tx
 from tgg_rnaseq_pipelines.rnaseq_sample_metadata.metadata_utils import (
     read_from_airtable, RNA_SEQ_BASE_ID, DATA_PATHS_TABLE_ID, DATA_PATHS_VIEW_ID,
@@ -276,7 +277,7 @@ def plot_rin_distribution() -> None:
     log.info("Saved %s", out)
 
 
-READS_SUMMARY_PATH = Path(DATA_DIR) / "reads_summary.tsv"
+READS_SUMMARY_PATH = Path(READS_SUMMARY_FILEPATH)
 
 
 def plot_mapping_rate() -> None:
@@ -1182,7 +1183,7 @@ def plot_fraser_psi3() -> None:
 
 
 JUNC_DIR = Path(DATA_DIR) / "outrider" / "all_junction_counts"
-GTEX_JUNC_PATH = Path(DATA_DIR) / "outrider" / "GTEX_blood.755_samples.normalized.junctions.bed.gz"
+GTEX_JUNC_PATH = Path(GTEX_JUNCTIONS_FILEPATH)
 
 SASHIMI_TARGETS = [
     ("<sample_id_3>", "GRK3", "CRYBB2P1", "chr22", 25520734, 25604376, "> 20 kb"),

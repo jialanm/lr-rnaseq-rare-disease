@@ -12,7 +12,7 @@ if DATA_DIR is None:
 DATA_DIR = str(Path(DATA_DIR).resolve())
 
 GCS_REF_GTF = "gs://<your-bucket>/ref/gencode.v47.annotation.gtf"
-GCS_BAM_DIR = "gs://<your-bucket>/downstreamProcessingOuts/minimap2"
+GCS_BAM_DIR = "gs://<your-bucket>/"
 GCS_FLNC_DIRS = [
     "gs://<your-bucket>/tag2167/merge",
     "gs://<your-bucket>/tag2195/merge",
@@ -45,3 +45,14 @@ DOCKER_GCLOUD_SAMTOOLS = (
 DEFAULT_BILLING_PROJECT = "<your-gcp-project>"
 DEFAULT_REQUESTER_PAYS_PROJECT = "<your-requester-pays-project>"
 HAIL_BATCH_REGIONS = ["us-central1"]
+
+# User-input file paths (local)
+METADATA_FILEPATH = "<your-metadata-file>"
+LR_SAMPLE_IDS_FILEPATH = "<your-lr-sample-ids-file>"
+GENCODE_GTF_FILEPATH = "<your-gencode-gtf-file>"
+MENDELIAN_GENE_DISEASE_TABLE_FILEPATH = "<your-mendelian-gene-disease-table>"
+READS_SUMMARY_FILEPATH = "<your-reads-summary-file>"
+GTEX_JUNCTIONS_FILEPATH = "<your-gtex-junctions-file>"
+
+# GCS reference paths
+GCS_GENE_MODELS_GFF = "<your-gene-models-gff>"

@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
+from rare_disease_lr_rnaseq.config import MENDELIAN_GENE_DISEASE_TABLE_FILEPATH
 from rare_disease_lr_rnaseq.utils import (
     DATA_DIR,
     read_sqanti3_annotated,
@@ -18,8 +19,6 @@ from rare_disease_lr_rnaseq.utils import (
 )
 
 logger = logging.getLogger(__name__)
-
-MENDELIAN_GENE_DISEASE_TABLE_FILEPATH = f"{DATA_DIR}/mendelian_gene_disease_table_1_16_2026.tsv"
 CLINGEN_EVIDENCE = {"Definitive", "Strong", "Moderate", "Limited"}
 
 EVIDENCE_COLORS = {

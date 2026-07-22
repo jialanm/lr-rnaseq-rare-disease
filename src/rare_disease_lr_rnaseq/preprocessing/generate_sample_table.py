@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 import math
+from rare_disease_lr_rnaseq.config import METADATA_FILEPATH
 from rare_disease_lr_rnaseq.utils import DATA_DIR, get_long_read_sample_ids, \
     read_sqanti3_annotated, get_unique_tx
 
@@ -35,7 +36,7 @@ def get_metadata() -> pd.DataFrame:
 
     :return: DataFrame with columns 'sample_id', 'RIN', and 'total_readcount'.
     """
-    md_df = pd.read_csv(f"{DATA_DIR}/metadata.tsv", sep='\t')
+    md_df = pd.read_csv(METADATA_FILEPATH, sep='\t')
     logger.info(md_df.columns)
     md_df = md_df.rename(columns={"entity:Sample_ID":"sample_id", "Total_readcount": "total_readcount"})
     use_cols = ["sample_id", "RIN", "total_readcount"]

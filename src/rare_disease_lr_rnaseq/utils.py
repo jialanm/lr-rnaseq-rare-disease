@@ -466,7 +466,8 @@ def get_long_read_sample_ids() -> list[str]:
 
     :return: List of sample identifiers read from the file.
     """
-    sample_ids = pd.read_table(f"{DATA_DIR}/lr_sample_ids.txt",
+    from rare_disease_lr_rnaseq.config import LR_SAMPLE_IDS_FILEPATH
+    sample_ids = pd.read_table(LR_SAMPLE_IDS_FILEPATH,
                                header=None).iloc[:, 0].tolist()
     return sample_ids
 

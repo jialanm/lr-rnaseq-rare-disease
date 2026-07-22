@@ -6,6 +6,7 @@ from typing import Optional
 
 import pandas as pd
 
+from rare_disease_lr_rnaseq.config import GENCODE_GTF_FILEPATH
 from rare_disease_lr_rnaseq.utils import get_long_read_sample_ids, read_quant_expr, read_gtf, \
     read_sqanti3_filtered, map_gene_ids_to_gencode_gene_name_gtf, DATA_DIR
 
@@ -51,7 +52,7 @@ def load_gene_id_map() -> dict[str, list[str]]:
         with open(cache_path, 'r') as f:
             return json.load(f)
 
-    gtf_file_path = f"{DATA_DIR}/gencode.v47.annotation.gtf.gz"
+    gtf_file_path = GENCODE_GTF_FILEPATH
     logger.info("Parsing GTF to build gene-ID map (one-time)...")
     gene_id_map = map_gene_ids_to_gencode_gene_name_gtf([], gtf_file_path)
 

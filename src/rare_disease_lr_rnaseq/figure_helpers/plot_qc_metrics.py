@@ -88,7 +88,8 @@ def load_metadata() -> pd.DataFrame:
 
     :return: DataFrame with sample metadata including renamed sample IDs.
     """
-    metadata_path = Path(DATA_DIR) / "metadata.tsv"
+    from rare_disease_lr_rnaseq.config import METADATA_FILEPATH
+    metadata_path = Path(METADATA_FILEPATH)
     df = pd.read_csv(metadata_path, sep='\t')
     df = df.rename(columns={"entity:Sample_ID": "sample_id"})
     df["sample_id"] = df["sample_id"].apply(lambda x: f"{x}_R1")
