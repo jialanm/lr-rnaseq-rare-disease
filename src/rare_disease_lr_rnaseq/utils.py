@@ -636,6 +636,9 @@ def map_gene_ids_to_gencode_gene_name_gtf(gene_ids: list[str], gtf_file_path: st
                 # Also store without version number for ENSG lookups without version suffix
                 gene_id_to_gene_name[gene_id.split('.')[0]] = [gene_name, gene_type]
 
+    if not gene_ids:
+        return gene_id_to_gene_name
+
     for gid in gene_ids:
         if gid.lower() != "novel":
             result[gid] = gene_id_to_gene_name.get(gid, ["NA", "NA"])
