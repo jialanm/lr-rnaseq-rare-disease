@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate manuscript figures at 1x1 inch, 300 DPI, viridis palette, no titles."""
+"""Generate manuscript figures at 1x1 inch, 300 DPI, viridis palette, no titles."""
 
 import logging
 from pathlib import Path
@@ -13,7 +13,7 @@ import pandas as pd
 import pysam
 import seaborn as sns
 
-from rare_disease_lr_rnaseq.config import READS_SUMMARY_FILEPATH, GTEX_JUNCTIONS_FILEPATH
+from rare_disease_lr_rnaseq.config import FRASER_JACCARD_FILEPATH, FRASER_PSI3_FILEPATH
 from rare_disease_lr_rnaseq.utils import DATA_DIR, get_long_read_sample_ids, read_sqanti3_annotated, get_unique_tx
 from tgg_rnaseq_pipelines.rnaseq_sample_metadata.metadata_utils import (
     read_from_airtable, RNA_SEQ_BASE_ID, DATA_PATHS_TABLE_ID, DATA_PATHS_VIEW_ID,
@@ -277,7 +277,7 @@ def plot_rin_distribution() -> None:
     log.info("Saved %s", out)
 
 
-READS_SUMMARY_PATH = Path(READS_SUMMARY_FILEPATH)
+READS_SUMMARY_PATH = Path(DATA_DIR) / "reads_summary.tsv"
 
 
 def plot_mapping_rate() -> None:
@@ -1117,8 +1117,8 @@ def plot_supplemental_3c() -> None:
 
 FRASER_TARGET = {"<sample_id_1>", "<sample_id_2>"}
 
-JACCARD_PATH = Path(DATA_DIR) / "filtered_p_value_0.3_deltapsi_0.1_whole_blood_jaccard_105_samples_pdj_0.3_deltapsi_0.1_results.csv"
-PSI3_PATH = Path(DATA_DIR) / "filtered_p_value_0.3_deltapsi_0.1_whole_blood_psi3_105_samples_pdj_0.3_deltapsi_0.1_results.csv"
+JACCARD_PATH = FRASER_JACCARD_FILEPATH
+PSI3_PATH = FRASER_PSI3_FILEPATH
 
 
 def _plot_fraser_ranked_bars(csv_path: Path, ylabel: str, outname: str) -> None:
@@ -1183,7 +1183,6 @@ def plot_fraser_psi3() -> None:
 
 
 JUNC_DIR = Path(DATA_DIR) / "outrider" / "all_junction_counts"
-GTEX_JUNC_PATH = Path(GTEX_JUNCTIONS_FILEPATH)
 
 SASHIMI_TARGETS = [
     ("<sample_id_3>", "GRK3", "CRYBB2P1", "chr22", 25520734, 25604376, "> 20 kb"),
@@ -1216,16 +1215,18 @@ def _load_shared_junctions(
     return df[(df["genomic_start_coord"] == donor) | (df["genomic_end_coord"] == acceptor)]
 
 
-def _get_gtex_shared(chrom: str, donor: int, acceptor: int) -> pd.DataFrame:
+def _get_gtex_shared(chrom: str, donor: int, acceptor: int,
+                     gtex_junc_path: Path) -> pd.DataFrame:
     """
     Query GTEx junction BED file for junctions sharing a donor or acceptor site.
 
     :param chrom: Chromosome name.
     :param donor: Genomic donor coordinate.
     :param acceptor: Genomic acceptor coordinate.
+    :param gtex_junc_path: Path to the tabix-indexed GTEx junctions BED file.
     :return: DataFrame with start, end, and reads columns for matching junctions.
     """
-    tbx = pysam.TabixFile(str(GTEX_JUNC_PATH))
+    tbx = pysam.TabixFile(str(gtex_junc_path))
     records: list[tuple[int, int, int]] = []
     lo = min(donor, acceptor) - 1000
     hi = max(donor, acceptor) + 1000
@@ -1267,7 +1268,8 @@ def _draw_arc(ax: plt.Axes, x1: int, x2: int, height: float, color: str,
 
 
 def _plot_sashimi(sample_id: str, gene1: str, gene2: str, chrom: str,
-                  junc_start: int, junc_end: int, dist_cat: str = "") -> None:
+                  junc_start: int, junc_end: int, dist_cat: str = "",
+                  *, gtex_junc_path: Path) -> None:
     """
     Generate a sashimi-style arc plot for a fusion junction across three tracks.
 
@@ -1278,6 +1280,7 @@ def _plot_sashimi(sample_id: str, gene1: str, gene2: str, chrom: str,
     :param junc_start: Genomic start coordinate of the fusion junction.
     :param junc_end: Genomic end coordinate of the fusion junction.
     :param dist_cat: Distance category label for the title.
+    :param gtex_junc_path: Path to the tabix-indexed GTEx junctions BED file.
     """
     setup_style()
     donor, acceptor = junc_start, junc_end
@@ -1308,7 +1311,7 @@ def _plot_sashimi(sample_id: str, gene1: str, gene2: str, chrom: str,
     else:
         avg_juncs = pd.DataFrame(columns=["start", "end", "reads"])
 
-    gtex_juncs = _get_gtex_shared(chrom, donor, acceptor)
+    gtex_juncs = _get_gtex_shared(chrom, donor, acceptor, gtex_junc_path)
 
     all_coords: list[int] = [donor, acceptor]
     for df_check in [sample_juncs, avg_juncs, gtex_juncs]:
@@ -1404,12 +1407,14 @@ def _plot_sashimi(sample_id: str, gene1: str, gene2: str, chrom: str,
     log.info("Saved %s", out)
 
 
-def plot_sashimi_all() -> None:
+def plot_sashimi_all(gtex_junc_path: Path) -> None:
     """
     Generate sashimi plots for all predefined fusion junction targets.
+
+    :param gtex_junc_path: Path to the tabix-indexed GTEx junctions BED file.
     """
     for sid, g1, g2, chrom, js, je, dc in SASHIMI_TARGETS:
-        _plot_sashimi(sid, g1, g2, chrom, js, je, dc)
+        _plot_sashimi(sid, g1, g2, chrom, js, je, dc, gtex_junc_path=gtex_junc_path)
 
 
 def plot_supplemental_1a() -> None:
@@ -2367,6 +2372,15 @@ def plot_rqs_distribution() -> None:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate manuscript figures.")
+    parser.add_argument(
+        "--gtex-junctions", type=Path, required=True,
+        help="Path to tabix-indexed GTEx junctions BED file.",
+    )
+    args = parser.parse_args()
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     log.info("=== Figure 1: Read length distribution ===")
@@ -2427,7 +2441,7 @@ if __name__ == "__main__":
     plot_fraser_psi3()
 
     log.info("=== Figures 17-19: Sashimi plots ===")
-    plot_sashimi_all()
+    plot_sashimi_all(args.gtex_junctions)
 
     log.info("=== Supplemental 2A: Transcript isoforms per sample ===")
     plot_supplemental_1a()

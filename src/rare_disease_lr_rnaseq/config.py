@@ -51,8 +51,8 @@ METADATA_FILEPATH = "<your-metadata-file>"
 LR_SAMPLE_IDS_FILEPATH = "<your-lr-sample-ids-file>"
 GENCODE_GTF_FILEPATH = "<your-gencode-gtf-file>"
 MENDELIAN_GENE_DISEASE_TABLE_FILEPATH = "<your-mendelian-gene-disease-table>"
-READS_SUMMARY_FILEPATH = "<your-reads-summary-file>"
-GTEX_JUNCTIONS_FILEPATH = "<your-gtex-junctions-file>"
+FRASER_JACCARD_FILEPATH = "<your-fraser-jaccard-results-csv>"
+FRASER_PSI3_FILEPATH = "<your-fraser-psi3-results-csv>"
 
 # GCS reference paths
 GCS_GENE_MODELS_GFF = "<your-gene-models-gff>"
