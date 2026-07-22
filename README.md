@@ -41,9 +41,9 @@ Edit `src/rare_disease_lr_rnaseq/config.py` to set all placeholder values (marke
 - `METADATA_FILEPATH` — sample metadata TSV (columns: `entity:Sample_ID`, `Gender`, `RIN`, `Total_readcount`, etc.)
 - `LR_SAMPLE_IDS_FILEPATH` — text file with one long-read sample ID per line
 - `GENCODE_GTF_FILEPATH` — local GENCODE GTF annotation (gzipped)
-- `MENDELIAN_GENE_DISEASE_TABLE_FILEPATH` — Mendelian gene-disease association table with ClinGen classifications
-- `FRASER_JACCARD_FILEPATH` — FRASER2 Jaccard results CSV (output of the splicing pipeline)
-- `FRASER_PSI3_FILEPATH` — FRASER1 PSI3 results CSV (output of the splicing pipeline)
+- `MENDELIAN_GENE_DISEASE_TABLE_FILEPATH` (optional) — Mendelian gene-disease association table with ClinGen classifications
+- `FRASER_JACCARD_FILEPATH`(optional) — FRASER2 Jaccard results CSV (output of the splicing pipeline)
+- `FRASER_PSI3_FILEPATH` (optional) — FRASER1 PSI3 results CSV (output of the splicing pipeline)
 
 **Docker images** are pre-configured; only update if rebuilding containers.
 
