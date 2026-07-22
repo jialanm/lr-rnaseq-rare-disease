@@ -53,21 +53,21 @@ Edit `src/rare_disease_lr_rnaseq/config.py` to set all placeholder values (marke
 
 1. **SQANTI3 filtering** — `src/.../sqanti3/sqanti3_filter.py`
 2. **Preprocessing** — annotate, generate sample/fusion tables, read counts, read length distributions
-   - `src/.../preprocessing/annotate_gene_and_expr.py`
-   - `src/.../preprocessing/generate_sample_table.py`
-   - `src/.../preprocessing/generate_fusion_tx_table.py`
-   - `src/.../preprocessing/generate_reads_summary.py`
-   - `src/.../preprocessing/generate_rl_dist.py`
+   - `src/rare_disease_lr_rnaseq/preprocessing/annotate_gene_and_expr.py`
+   - `src/rare_disease_lr_rnaseq/preprocessing/generate_sample_table.py`
+   - `src/rare_disease_lr_rnaseq/preprocessing/generate_fusion_tx_table.py`
+   - `src/rare_disease_lr_rnaseq/preprocessing/generate_reads_summary.py`
+   - `src/rare_disease_lr_rnaseq/preprocessing/generate_rl_dist.py`
 3. **Coverage** — short-read and long-read coverage computation
-   - `src/.../coverage/get_sr_coverage.py`
-   - `src/.../coverage/get_lr_coverage.py`
+   - `src/rare_disease_lr_rnaseq/coverage/get_sr_coverage.py`
+   - `src/rare_disease_lr_rnaseq/coverage/get_lr_coverage.py`
 4. **Counting** — junction support and transcript read counts
-   - `src/.../counting/count_alt5_junction_support.py`
-   - `src/.../counting/count_reads.py`
+   - `src/rare_disease_lr_rnaseq/counting/count_alt5_junction_support.py`
+   - `src/rare_disease_lr_rnaseq/counting/count_reads.py`
 5. **Splicing** — FRASER2 and alt 5' shift analyses
-   - `src/.../splicing/fraser2_pipeline.py`
-   - `src/.../splicing/alt5_shift_analysis.py`
-   - `src/.../splicing/alt5_shift_analysis_sr.py`
+   - `src/rare_disease_lr_rnaseq/splicing/fraser2_pipeline.py`
+   - `src/rare_disease_lr_rnaseq/splicing/alt5_shift_analysis.py`
+   - `src/rare_disease_lr_rnaseq/splicing/alt5_shift_analysis_sr.py`
 
 ### Figure generation
 
