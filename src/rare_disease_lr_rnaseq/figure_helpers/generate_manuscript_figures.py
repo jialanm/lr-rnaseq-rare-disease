@@ -2410,88 +2410,88 @@ if __name__ == "__main__":
     log.info("=== Figure 9: Trio-unique transcripts violin ===")
     plot_unique_tx_violin()
 
-    log.info("=== Supplemental 2A: Combined violin by SQANTI3 category ===")
+    log.info("=== Figure 10: Combined violin by SQANTI3 category ===")
     plot_combined_tx_violin()
 
-    log.info("=== Supplemental 2E: Novel isoform enrichment ===")
+    log.info("=== Figure 11: Novel isoform enrichment ===")
     plot_supplemental_2c_novel_enrichment()
 
-    log.info("=== Figure 10: DA genes expressed ===")
+    log.info("=== Figure 12: DA genes expressed ===")
     plot_da_genes_expressed()
 
-    log.info("=== Figure 11: DA genes by evidence level ===")
+    log.info("=== Figure 13: DA genes by evidence level ===")
     plot_da_genes_by_evidence()
 
-    log.info("=== Fig 2B: DA genes combined ===")
+    log.info("=== Figure 14: DA genes combined ===")
     plot_fig2b_da_genes_combined()
 
-    log.info("=== Figure 12: Unique fusion transcripts by distance ===")
+    log.info("=== Figure 15: Unique fusion transcripts by distance ===")
     plot_unique_fusion_by_distance()
 
-    log.info("=== Figure 13: Alt 5' shift vs novel (BAM) ===")
+    log.info("=== Figure 16: Alt 5' shift vs novel (BAM) ===")
     plot_alt5_shift_vs_novel_bam()
 
-    log.info("=== Figure 14: Alt 5' shift vs novel (SR) ===")
+    log.info("=== Figure 17: Alt 5' shift vs novel (SR) ===")
     plot_alt5_shift_vs_novel_sr()
 
-    log.info("=== Figure 15: FRASER2 Jaccard ranked ===")
+    log.info("=== Figure 18: FRASER2 Jaccard ranked ===")
     plot_fraser_jaccard()
 
-    log.info("=== Figure 16: FRASER1 PSI3 ranked ===")
+    log.info("=== Figure 19: FRASER1 PSI3 ranked ===")
     plot_fraser_psi3()
 
-    log.info("=== Figures 17-19: Sashimi plots ===")
+    log.info("=== Figures 20-23: Sashimi plots ===")
     plot_sashimi_all(args.gtex_junctions)
 
-    log.info("=== Supplemental 2A: Transcript isoforms per sample ===")
+    log.info("=== Figure 24: Transcript isoforms per sample ===")
     plot_supplemental_1a()
 
-    log.info("=== Supplemental 2B: Trio-unique isoforms per sample ===")
+    log.info("=== Figure 25: Trio-unique isoforms per sample ===")
     plot_supplemental_1b()
 
-    log.info("=== Supplemental 2C: Canonical splice site rate ===")
+    log.info("=== Figure 26: Canonical splice site rate ===")
     plot_supplemental_1c()
 
-    log.info("=== Supplemental 2D: Reads per transcript ===")
+    log.info("=== Figure 27: Reads per transcript ===")
     plot_supplemental_1d()
 
-    log.info("=== Supplemental 2E: Fusion transcripts per sample ===")
+    log.info("=== Figure 28: Fusion transcripts per sample ===")
     plot_supplemental_2e()
 
-    log.info("=== Supplemental 2F: Proband vs parent fusion counts ===")
+    log.info("=== Figure 29: Proband vs parent fusion counts ===")
     plot_supplemental_2f()
 
-    log.info("=== Supplemental 2H: Fusion gene Venn diagram ===")
+    log.info("=== Figure 30: Fusion gene Venn diagram ===")
     plot_supplemental_2h()
 
-    log.info("=== Supplemental 3A: Alt 5' junction donut ===")
+    log.info("=== Figure 31: Alt 5' junction donut ===")
     plot_supplemental_3a()
 
-    log.info("=== Supplemental 3B: Alt 5' per-sample metrics ===")
+    log.info("=== Figure 32: Alt 5' per-sample metrics ===")
     plot_supplemental_3b()
 
-    log.info("=== Supplemental 3C: Alt 5' shift vs novel (raw counts) ===")
+    log.info("=== Figure 33: Alt 5' shift vs novel (raw counts) ===")
     plot_supplemental_3c()
 
-    log.info("=== Supplemental Table 1: Per-sample summary ===")
+    log.info("=== Figure 34: Per-sample summary table ===")
     generate_supplemental_table_1()
 
-    log.info("=== Fig 2B: DA genes combined (Watchmaker) ===")
+    log.info("=== Figure 35: DA genes combined (Watchmaker) ===")
     plot_fig2b_da_genes_combined_watchmaker()
 
-    log.info("=== Fig 2B: DA genes combined (Whole blood) ===")
+    log.info("=== Figure 36: DA genes combined (Whole blood) ===")
     plot_fig2b_da_genes_combined_whole_blood()
 
-    log.info("=== Fig 2B: DA genes combined (all three, all evidence) ===")
+    log.info("=== Figure 37: DA genes combined (all three, all evidence) ===")
     plot_fig2b_da_genes_combined_all()
 
-    log.info("=== Fig 2B: DA genes combined (all three, DSM only) ===")
+    log.info("=== Figure 38: DA genes combined (all three, DSM only) ===")
     plot_fig2b_da_genes_combined_all(
         evidence_levels=["Definitive", "Strong", "Moderate"],
         output_suffix="_dsm_only",
     )
 
-    log.info("=== RQS distribution (Watchmaker) ===")
+    log.info("=== Figure 39: RQS distribution (Watchmaker) ===")
     plot_rqs_distribution()
 
     log.info("All figures saved to %s", OUTPUT_DIR)
