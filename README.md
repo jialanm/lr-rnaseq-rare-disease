@@ -24,26 +24,39 @@ Set the `LRRNASEQ_DATA_DIR` environment variable to point to your local data dir
 export LRRNASEQ_DATA_DIR=/path/to/data
 ```
 
-### 3. Configure cloud paths
+### 3. Configure `config.py`
 
-Edit `src/rare_disease_lr_rnaseq/config.py` to set:
+Edit `src/rare_disease_lr_rnaseq/config.py` to set all placeholder values (marked with `<your-...>`).
+
+**Cloud paths:**
 - `GCS_REF_GTF` — GCS path to GENCODE v47 annotation GTF
 - `GCS_BAM_DIR` — GCS path to aligned BAM files
 - `GCS_FLNC_DIRS` — GCS paths to FLNC BAM directories
 - `GCS_TMP_BUCKET` — GCS temporary bucket
 - `GCS_OUTPUT_BASE` — GCS output bucket
+- `GCS_GENE_MODELS_GFF` — GCS path to GENCODE GFF3 annotation (version numbers stripped, used by FRASER2)
 - `DEFAULT_BILLING_PROJECT` / `DEFAULT_REQUESTER_PAYS_PROJECT` — GCP project IDs
-- Docker image SHAs (pre-configured, only update if rebuilding)
+
+**User-input file paths (local):**
+- `METADATA_FILEPATH` — sample metadata TSV (columns: `entity:Sample_ID`, `Gender`, `RIN`, `Total_readcount`, etc.)
+- `LR_SAMPLE_IDS_FILEPATH` — text file with one long-read sample ID per line
+- `GENCODE_GTF_FILEPATH` — local GENCODE GTF annotation (gzipped)
+- `MENDELIAN_GENE_DISEASE_TABLE_FILEPATH` — Mendelian gene-disease association table with ClinGen classifications
+- `FRASER_JACCARD_FILEPATH` — FRASER2 Jaccard results CSV (output of the splicing pipeline)
+- `FRASER_PSI3_FILEPATH` — FRASER1 PSI3 results CSV (output of the splicing pipeline)
+
+**Docker images** are pre-configured; only update if rebuilding containers.
 
 ## Pipeline Execution Order
 
 ### Upstream computation (produces data consumed by figures)
 
 1. **SQANTI3 filtering** — `src/.../sqanti3/sqanti3_filter.py`
-2. **Preprocessing** — annotate, generate sample/fusion tables, read length distributions
+2. **Preprocessing** — annotate, generate sample/fusion tables, read counts, read length distributions
    - `src/.../preprocessing/annotate_gene_and_expr.py`
    - `src/.../preprocessing/generate_sample_table.py`
    - `src/.../preprocessing/generate_fusion_tx_table.py`
+   - `src/.../preprocessing/generate_reads_summary.py`
    - `src/.../preprocessing/generate_rl_dist.py`
 3. **Coverage** — short-read and long-read coverage computation
    - `src/.../coverage/get_sr_coverage.py`
@@ -59,21 +72,29 @@ Edit `src/rare_disease_lr_rnaseq/config.py` to set:
 ### Figure generation
 
 ```bash
-python -m rare_disease_lr_rnaseq.figure_helpers.generate_manuscript_figures
-python -m rare_disease_lr_rnaseq.figure_helpers.plot_qc_metrics
+python -m rare_disease_lr_rnaseq.figure_helpers.generate_manuscript_figures \
+    --gtex-junctions /path/to/GTEX_junctions.bed.gz
+
+python -m rare_disease_lr_rnaseq.figure_helpers.plot_qc_metrics \
+    --reads-summary /path/to/reads_summary.tsv
 ```
 
 ## Data Requirements
 
-The following data files are expected under `$LRRNASEQ_DATA_DIR`:
+Files configured via `config.py` (see step 3 above):
+- Sample metadata TSV
+- Long-read sample IDs list
+- GENCODE v47 annotation GTF
+- Mendelian gene-disease association table
+- FRASER2 Jaccard and PSI3 results CSVs
 
-- GENCODE v47 annotation GTF (`gencode.v47.annotation.gtf.gz`)
+Files expected under `$LRRNASEQ_DATA_DIR`:
 - Per-sample SQANTI3 classification and junction files
 - Per-sample LRAA expression quantification files
-- Mendelian gene-disease association table
-- ClinGen gene validity classifications
-- FRASER2 output tables
 - Short-read STAR SJ.out.tab files (for alt 5' SR analysis)
+
+Files passed as CLI arguments:
+- GTEx junctions BED file (tabix-indexed, for sashimi plots)
 
 ## Repository Structure
 
