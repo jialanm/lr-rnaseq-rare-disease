@@ -23,6 +23,7 @@ Set the `LRRNASEQ_DATA_DIR` environment variable to point to your local data dir
 ```bash
 export LRRNASEQ_DATA_DIR=/path/to/data
 ```
+It is the directory where output files are.
 
 ### 3. Configure `config.py`
 
