@@ -130,4 +130,4 @@ Batch scripts use [Hail Batch](https://hail.is/docs/batch/index.html) to paralle
 
 ## License
 
-See LICENSE file.
+MIT LICENSE.
